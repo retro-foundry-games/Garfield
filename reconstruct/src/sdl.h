@@ -26,7 +26,7 @@ typedef struct {
 
 extern Hardware hw;
 
-/* Console keyboard queue; entries are (ST scancode << 16) | ASCII. Arrow keys and Ctrl are the joystick. */
+/* Console keyboard queue; entries are (ST scancode << 16) | ASCII. Arrow keys, Ctrl and Shift are the joystick. */
 void hw_push_key(uint32_t key);
 uint32_t hw_pop_key(void);   /* 0 when empty */
 

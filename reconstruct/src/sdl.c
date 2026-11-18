@@ -231,7 +231,7 @@ int game_run(const char *dir)
 
 /* ---- the SDL host ---- */
 
-/* Console keys; the arrow keys and Ctrl belong to the joystick and never reach the queue. */
+/* Console keys; the arrow keys, Ctrl and Shift belong to the joystick and never reach the queue. */
 static void push_console_key(SDL_Keycode key, SDL_Scancode sc)
 {
     uint32_t st = 0, ascii = 0;
@@ -289,7 +289,8 @@ static uint8_t poll_joystick(void)
     const bool *k = SDL_GetKeyboardState(NULL);
     return (k[SDL_SCANCODE_UP] ? JOY_UP : 0) | (k[SDL_SCANCODE_DOWN] ? JOY_DOWN : 0) |
            (k[SDL_SCANCODE_LEFT] ? JOY_LEFT : 0) | (k[SDL_SCANCODE_RIGHT] ? JOY_RIGHT : 0) |
-           (k[SDL_SCANCODE_LCTRL] || k[SDL_SCANCODE_RCTRL] ? JOY_FIRE : 0);
+           (k[SDL_SCANCODE_LCTRL] || k[SDL_SCANCODE_RCTRL] || k[SDL_SCANCODE_LSHIFT] || k[SDL_SCANCODE_RSHIFT]
+                ? JOY_FIRE : 0);   /* Shift: macOS takes Ctrl+arrows for Mission Control and Spaces */
 }
 
 #define SCALE 3
