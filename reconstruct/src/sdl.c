@@ -4,6 +4,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 
 Hardware hw;
 uint16_t hardware_palette[16];
@@ -320,6 +323,10 @@ static void on_frame(void)
     uint64_t dt = SDL_GetTicksNS() - frame_start;
     if (dt < FRAME_NS)
         SDL_DelayNS(FRAME_NS - dt);
+#ifdef __EMSCRIPTEN__
+    else
+        emscripten_sleep(0);                    /* the browser draws and reads input only while the program is suspended */
+#endif
     frame_start = SDL_GetTicksNS();
     for (SDL_Event e; SDL_PollEvent(&e);) {
         if (e.type == SDL_EVENT_QUIT || (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE))

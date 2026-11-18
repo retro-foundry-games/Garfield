@@ -4,3 +4,6 @@ extracted/
 .venv/
 *.stx
 core*
+result
+result-*
+.direnv/

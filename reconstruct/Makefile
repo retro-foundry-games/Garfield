@@ -1,5 +1,5 @@
 CC      ?= gcc
-PKG     := PKG_CONFIG_LIBDIR=/usr/lib/pkgconfig pkg-config
+PKG     := $(if $(IN_NIX_SHELL),pkg-config,PKG_CONFIG_LIBDIR=/usr/lib/pkgconfig pkg-config)
 CFLAGS  := -m32 -std=c11 -O2 -Wall -Wextra $(shell $(PKG) --cflags sdl3)
 LDFLAGS := -m32
 LDLIBS  := $(shell $(PKG) --libs sdl3)

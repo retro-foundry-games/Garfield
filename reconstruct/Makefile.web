@@ -1,0 +1,60 @@
+# The browser build (WebAssembly, Emscripten): the same game code as the desktop port; the page asks for the disk image, whose files the program
+# takes from it. The program waits for frames in blocking calls, which Asyncify suspends so the browser can draw (no threads, no special headers).
+#
+#   make -f Makefile.web            build build/web/garfield.html, garfield.js, garfield.wasm
+#   make -f Makefile.web serve      serve the folder on http://localhost:8080/
+#   make -f Makefile.web clean
+#
+# Run inside the flake's shell (nix develop): it has emcc, cmake and ninja; GARFIELD_SDL3_SOURCE_DIR is SDL3's source, built here for Emscripten once.
+# `nix build .#web` does the same in the sandbox (GARFIELD_NO_NIX=1: no shell of its own; SDL3_PREFIX: the SDL3 the flake built for Emscripten; W: the output folder).
+
+HERE := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+ROOT := $(abspath $(HERE)/..)
+W    ?= $(HERE)/build/web
+EMCC ?= emcc
+SDL3_SRC    ?= $(GARFIELD_SDL3_SOURCE_DIR)
+SDL3_PREFIX ?= $(W)/sdl3
+
+ifeq ($(or $(IN_NIX_SHELL),$(GARFIELD_NO_NIX)),)
+.PHONY: all $(MAKECMDGOALS)
+all $(MAKECMDGOALS):
+	@nix develop $(ROOT) --command $(MAKE) --no-print-directory -f $(lastword $(MAKEFILE_LIST)) $@
+else
+
+CFLAGS := -std=gnu11 -O2 -Wall -Wextra -I$(HERE)/src -I$(ROOT)/emulator -I$(SDL3_PREFIX)/include
+SOURCES := $(HERE)/src/game.c $(HERE)/src/unknown.c $(HERE)/src/sdl.c $(HERE)/src/webmain.c \
+           $(ROOT)/emulator/stx.c $(ROOT)/emulator/disk.c $(ROOT)/emulator/extract_files.c
+OBJS := $(patsubst %.c,$(W)/%.o,$(notdir $(SOURCES)))
+
+.PHONY: all serve clean
+all: $(W)/garfield.html
+
+$(W):
+	mkdir -p $@
+
+$(SDL3_PREFIX)/lib/libSDL3.a: | $(W)
+	emcmake cmake -S $(SDL3_SRC) -B $(W)/sdl3-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$(SDL3_PREFIX) \
+	    -DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TEST_LIBRARY=OFF -DSDL_TESTS=OFF -DSDL_INSTALL=ON
+	cmake --build $(W)/sdl3-build
+	cmake --install $(W)/sdl3-build
+
+$(W)/%.o: $(HERE)/src/%.c $(wildcard $(HERE)/src/*.h) $(SDL3_PREFIX)/lib/libSDL3.a | $(W)
+	$(EMCC) $(CFLAGS) -c $< -o $@
+$(W)/%.o: $(ROOT)/emulator/%.c $(wildcard $(ROOT)/emulator/*.h) $(SDL3_PREFIX)/lib/libSDL3.a | $(W)
+	$(EMCC) $(CFLAGS) -w -c $< -o $@
+
+LINK := -sASYNCIFY -sINITIAL_MEMORY=33554432 -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=1048576 -sENVIRONMENT=web -sFORCE_FILESYSTEM=1 -sINVOKE_RUN=0 \
+        "-sEXPORTED_RUNTIME_METHODS=['FS','callMain']" --shell-file=$(ROOT)/web/shell.html
+
+$(W)/garfield.html: $(OBJS) $(ROOT)/web/shell.html $(ROOT)/web/retro-foundry.png $(HERE)/Makefile.web
+	$(EMCC) $(LINK) -o $@ $(OBJS) -L$(SDL3_PREFIX)/lib -lSDL3 -lm
+	cp $(ROOT)/web/retro-foundry.png $(W)/
+
+serve: $(W)/garfield.html
+	python3 -m http.server 8080 --directory $(W)
+
+clean:
+	rm -rf $(W)
+
+-include $(W)/*.d
+endif

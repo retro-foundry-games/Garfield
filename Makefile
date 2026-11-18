@@ -5,9 +5,9 @@ STX := Garfield - Big, Fat, Hairy Deal.stx
 assets: build/emulator/extract
 	./build/emulator/extract "$(STX)" extracted
 
-build/emulator/extract: emulator/extract.c emulator/disk.c emulator/stx.c emulator/disk.h emulator/stx.h
+build/emulator/extract: emulator/extract.c emulator/extract_files.c emulator/extract_files.h emulator/disk.c emulator/stx.c emulator/disk.h emulator/stx.h
 	mkdir -p build/emulator
-	$(CC) -std=gnu11 -O2 -Wall -Wextra -o $@ emulator/extract.c emulator/disk.c emulator/stx.c
+	$(CC) -std=gnu11 -O2 -Wall -Wextra -o $@ emulator/extract.c emulator/extract_files.c emulator/disk.c emulator/stx.c
 
 # Reference emulator vs. hybrid, driven by emulator/lockstep.lua.
 lockstep:
