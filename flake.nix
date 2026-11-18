@@ -57,11 +57,18 @@
       apps = forAll (pkgs: {
         default = {
           type = "app";
-          program = toString (pkgs.writeShellScript "garfield-serve" ''
-            port=''${PORT:-8080}
-            echo "Garfield on http://localhost:$port/"
-            exec ${pkgs.python3}/bin/python3 -m http.server "$port" \
-              --bind 127.0.0.1 --directory ${self.packages.${pkgs.stdenv.hostPlatform.system}.web}
+          # no-store: store files are dated 1970, so browsers would cache a stale build.
+          program = toString (pkgs.writeScript "garfield-serve" ''
+            #!${pkgs.python3}/bin/python3
+            import functools, http.server, os
+            class Handler(http.server.SimpleHTTPRequestHandler):
+                def end_headers(self):
+                    self.send_header("Cache-Control", "no-store")
+                    super().end_headers()
+            port = int(os.environ.get("PORT", "8080"))
+            print(f"Garfield on http://localhost:{port}/", flush=True)
+            handler = functools.partial(Handler, directory="${self.packages.${pkgs.stdenv.hostPlatform.system}.web}")
+            http.server.ThreadingHTTPServer(("127.0.0.1", port), handler).serve_forever()
           '');
         };
       });
