@@ -7,8 +7,16 @@
 
   outputs = { self, nixpkgs }:
     let
-      systems = [ "x86_64-linux" "aarch64-linux" ];
-      forAll = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+      linux = [ "x86_64-linux" "aarch64-linux" ];
+      darwin = [ "x86_64-darwin" "aarch64-darwin" ];
+      forSystems = systems: f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+      forAll = forSystems (linux ++ darwin);
+      webTools = pkgs: [
+        pkgs.cmake
+        pkgs.ninja
+        pkgs.emscripten
+        pkgs.python3
+      ];
       src = pkgs: pkgs.lib.cleanSourceWith {
         src = ./.;
         filter = path: type:
@@ -34,7 +42,7 @@
           dontUseCmakeConfigure = true;
           buildPhase = ''
             export HOME=$TMPDIR EM_CACHE=$TMPDIR/em-cache
-            make -C reconstruct -f Makefile.web GARFIELD_NO_NIX=1 SDL3_PREFIX=${self.packages.${pkgs.system}.sdl3-emscripten} W=$PWD/build/web
+            make -C reconstruct -f Makefile.web GARFIELD_NO_NIX=1 SDL3_PREFIX=${self.packages.${pkgs.stdenv.hostPlatform.system}.sdl3-emscripten} W=$PWD/build/web
           '';
           installPhase = ''
             mkdir -p $out
@@ -42,24 +50,42 @@
             cp build/web/garfield.html $out/index.html
           '';
         };
-        default = self.packages.${pkgs.system}.web;
+        default = self.packages.${pkgs.stdenv.hostPlatform.system}.web;
       });
 
-      devShells = forAll (pkgs: {
+      # nix run: serve the browser build on http://localhost:8080/ (PORT overrides).
+      apps = forAll (pkgs: {
+        default = {
+          type = "app";
+          program = toString (pkgs.writeShellScript "garfield-serve" ''
+            port=''${PORT:-8080}
+            echo "Garfield on http://localhost:$port/"
+            exec ${pkgs.python3}/bin/python3 -m http.server "$port" \
+              --bind 127.0.0.1 --directory ${self.packages.${pkgs.stdenv.hostPlatform.system}.web}
+          '');
+        };
+      });
+
+      devShells = forSystems linux (pkgs: {
         default = pkgs.mkShell.override { stdenv = pkgs.overrideCC pkgs.stdenv pkgs.gcc_multi; } {
           buildInputs = [
             pkgs.pkgsi686Linux.sdl3
             pkgs.pkgsi686Linux.unicorn
           ];
-          packages = [
-            pkgs.cmake
-            pkgs.ninja
+          packages = webTools pkgs ++ [
             pkgs.pkg-config
             pkgs.gcc_multi
-            pkgs.emscripten
-            pkgs.python3
             pkgs.uv
           ];
+          GARFIELD_SDL3_SOURCE_DIR = pkgs.sdl3.src;
+          shellHook = ''
+            export EM_CACHE="$PWD/build/emscripten-cache"
+          '';
+        };
+      }) // forSystems darwin (pkgs: {
+        # The native port needs an i686 Linux toolchain; macOS gets the browser build only.
+        default = pkgs.mkShell {
+          packages = webTools pkgs;
           GARFIELD_SDL3_SOURCE_DIR = pkgs.sdl3.src;
           shellHook = ''
             export EM_CACHE="$PWD/build/emscripten-cache"

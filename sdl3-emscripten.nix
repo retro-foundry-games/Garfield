@@ -10,6 +10,8 @@ pkgs.stdenv.mkDerivation {
     pkgs.emscripten
   ];
   dontUseCmakeConfigure = true;
+  # Host strip rewrites the wasm archive (Apple's breaks wasm-ld).
+  dontStrip = true;
   buildPhase = ''
     export HOME=$TMPDIR EM_CACHE=$TMPDIR/em-cache
     emcmake cmake -S . -B build-sdl -G Ninja \
