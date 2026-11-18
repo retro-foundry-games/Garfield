@@ -41,3 +41,6 @@ clean:
 	rm -rf build
 
 .PHONY: run clean dev
+
+# Not made from anything (make would otherwise try Makefile.web, a CWEB file to it).
+Makefile Makefile.web: ;

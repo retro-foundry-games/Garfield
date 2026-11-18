@@ -34,13 +34,14 @@ uint32_t hw_pop_key(void);   /* 0 when empty */
 typedef struct {
     void (*sync)(int id);   /* the program reached a point where the original takes interrupts (before they run) */
     void (*frame)(void);    /* a vertical blank was delivered: show the screen, pace, read input */
+    void (*quit)(void);     /* the program is to end: the host may take it (and return), otherwise the process exits */
     int (*unported)(uint32_t address);   /* the program was sent to something that is not code; nonzero: the host has restored a
                                             state and the program carries on from the top of its main loop */
 } GameHooks;
 extern GameHooks game_hooks;
-int game_run(const char *data_dir);   /* returns when the program ends or game_quit() is called */
+int game_load(const char *data_dir);  /* the program's image into memory */
+int game_run(const char *data_dir);   /* game_load, then the program from its start; the process ends in game_quit() */
 void game_quit(void);
-void game_resume(void);   /* carries on from the top of the main loop, from whatever state the memory is in */
 void game_unported(uint32_t address);   /* offers such a jump to the host; returns when it did not take it */
 uint32_t game_frames(void);
 void game_render(uint32_t *rgba);

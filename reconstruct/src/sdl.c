@@ -1,6 +1,5 @@
 #include <SDL3/SDL.h>
 #include "sdl.h"
-#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -150,34 +149,33 @@ GameHooks game_hooks;
 
 static char data_dir[512];
 static uint32_t frames;
-static jmp_buf quit_env, resume_env;
-static int running;
 
 uint32_t game_frames(void) { return frames; }
 void game_quit(void)
 {
-    if (running)   /* outside game_run (a unit check of one routine) there is nothing to leave */
-        longjmp(quit_env, 1);
-}
-
-void game_resume(void)
-{
-    if (running)
-        longjmp(resume_env, 1);
+    if (game_hooks.quit) {
+        game_hooks.quit();
+        return;
+    }
+    SDL_Log("exit after %u frames, player x=%u y=%u, room %u", game_frames(), mem.text.entities[PLAYER].x, mem.text.entities[PLAYER].y,
+            mem.vars.room);
+    SDL_Quit();
+    exit(0);
 }
 
 void game_unported(uint32_t address)
 {
-    if (running && game_hooks.unported && game_hooks.unported(address))
-        longjmp(resume_env, 1);
+    if (game_hooks.unported)
+        game_hooks.unported(address);
 }
 
 static uint32_t be32(const uint8_t *p) { return (uint32_t)p[0] << 24 | p[1] << 16 | p[2] << 8 | p[3]; }
 static void put_be32(uint8_t *p, uint32_t v) { p[0] = v >> 24; p[1] = v >> 16; p[2] = v >> 8; p[3] = v; }
 
 /* The program image as TOS would leave it: relocated code, basepage, and the stubs the original's vectors point at. */
-static int load_image(void)
+int game_load(const char *dir)
 {
+    snprintf(data_dir, sizeof data_dir, "%s", dir);
     char path[600];
     snprintf(path, sizeof path, "%s/GARFIELD.PRG", data_dir);
     FILE *f = fopen(path, "rb");
@@ -225,17 +223,9 @@ static int load_image(void)
 
 int game_run(const char *dir)
 {
-    snprintf(data_dir, sizeof data_dir, "%s", dir);
-    if (load_image() < 0)
+    if (game_load(dir) < 0)
         return -1;
-    running = 1;
-    if (!setjmp(quit_env)) {
-        if (setjmp(resume_env))
-            play_game();   /* the state is all in memory: the loop can be entered anywhere */
-        else
-            program_entry();
-    }
-    running = 0;
+    program_entry();
     return 0;
 }
 
@@ -357,8 +347,6 @@ int sdl_run(const char *data_dir)
     frame_start = SDL_GetTicksNS();
     game_hooks.frame = on_frame;
     int rc = game_run(data_dir);
-    SDL_Log("exit after %u frames, player x=%u y=%u, room %u", game_frames(), mem.text.entities[PLAYER].x, mem.text.entities[PLAYER].y,
-            mem.vars.room);
     SDL_Quit();
     return rc < 0;
 }

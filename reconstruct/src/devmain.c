@@ -15,6 +15,7 @@
    chunk ended by ">>". Replies end with a line containing a single ".". */
 #include <errno.h>
 #include <poll.h>
+#include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -236,6 +237,14 @@ static int l_emu_backtrace(lua_State *l)
 /* The port runs inside port.run(dir); the script gets control at every sync point through port.on_sync(fn(id)). */
 static int sync_ref = LUA_NOREF;
 static int resume_requested;
+static jmp_buf quit_env, resume_env;
+static int running;
+
+static void on_port_quit(void)
+{
+    if (running)   /* outside port.run (a unit check of one routine) there is nothing to leave */
+        longjmp(quit_env, 1);
+}
 
 static void on_port_sync(int id)
 {
@@ -249,7 +258,7 @@ static void on_port_sync(int id)
     }
     if (resume_requested) {   /* the script restored a state: the program goes on from the top of its main loop */
         resume_requested = 0;
-        game_resume();
+        longjmp(resume_env, 1);
     }
 }
 
@@ -284,6 +293,8 @@ static int on_port_unported(uint32_t address)
     }
     int resumed = lua_toboolean(L, -1);
     lua_pop(L, 1);
+    if (resumed && running)
+        longjmp(resume_env, 1);
     return resumed;
 }
 
@@ -300,7 +311,25 @@ static int l_port_on_unported(lua_State *l)
     return 0;
 }
 
-static int l_port_run(lua_State *l) { lua_pushinteger(l, game_run(luaL_optstring(l, 1, "extracted"))); return 1; }
+/* The program runs until it ends or game_quit(); a restored state is carried on from the top of its main loop. */
+static int l_port_run(lua_State *l)
+{
+    if (game_load(luaL_optstring(l, 1, "extracted")) < 0) {
+        lua_pushinteger(l, -1);
+        return 1;
+    }
+    game_hooks.quit = on_port_quit;
+    running = 1;
+    if (!setjmp(quit_env)) {
+        if (setjmp(resume_env))
+            play_game();
+        else
+            program_entry();
+    }
+    running = 0;
+    lua_pushinteger(l, 0);
+    return 1;
+}
 /* port.call(name): runs one routine of the port that takes no arguments, on the port's current memory. */
 static void call_room_state(void) { run_room_state(mem.vars.state_routine); }
 
