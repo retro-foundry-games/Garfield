@@ -1,0 +1,6 @@
+build/
+reconstruct/build/
+extracted/
+.venv/
+*.stx
+core*
